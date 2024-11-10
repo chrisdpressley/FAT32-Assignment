@@ -84,11 +84,13 @@ int* load_cluster_addresses(FILE *fp, struct FAT32_Boot *b, int root, int *total
       {
         int cluster = entry.DIR_FirstClusterLow + (entry.DIR_FirstClusterHigh << 16);// Full cluster
         bool already_visited = false;// Check if the cluster has been visited
-        for (int j = 0; j < *visited_clusters; j++) {
-            if (cluster_addresses[j] == cluster) {
-                already_visited = true;
-                break;
-            }
+        for (int j = 0; j < *visited_clusters; j++) 
+        {
+          if (cluster_addresses[j] == cluster) 
+          {
+            already_visited = true;
+            break;
+          }
         }
         if (!already_visited) // Add to list if not visited
         {
@@ -99,10 +101,8 @@ int* load_cluster_addresses(FILE *fp, struct FAT32_Boot *b, int root, int *total
           cluster_addresses[num_clusters] = cluster;
           num_clusters++;
           (*visited_clusters)++;
-
           // Recursively load subdirectories
           int *subdir_clusters = load_cluster_addresses(fp, b, cluster, total_entries, visited_clusters);
-          
           // Subdir clusters added to address array, starts from j = 1 due to storing the array size in the first element
           for (int j = 1; j < *total_entries; j++) 
           {
@@ -185,6 +185,7 @@ char * get_fat_file_name(char * token)
   }
   return newName;
 }
+// Finds file and then undeletes it using the first letter from the specified file to be deleted
 int undelete_file(FILE *fp, struct FAT32_Boot *b, struct DirectoryEntry *d, char *fileName,int clusterAddress, char firstLetter) 
 {
   fseek(fp,clusterAddress,SEEK_SET);
@@ -208,7 +209,7 @@ int undelete_file(FILE *fp, struct FAT32_Boot *b, struct DirectoryEntry *d, char
   }
   return -1; // File not found
 }
-
+// Deletes the file by finding it and then changing first element of name
 int delete_file(FILE *fp, struct FAT32_Boot *b, struct DirectoryEntry *d, char *fileName, int clusterAddress) 
 {
   char c = 0xe5;
@@ -238,6 +239,7 @@ int get_file_cluster(struct DirectoryEntry *d, char *fileName)
   }
   return -1;
 }
+// Finds empty directory are sets the values using the second struct
 int get_empty_directory_entry(FILE *fp,struct DirectoryEntry *d,struct DirectoryEntry *newD)
 {
   for(int i = 0;i < 16;i++)
@@ -258,6 +260,7 @@ int get_empty_directory_entry(FILE *fp,struct DirectoryEntry *d,struct Directory
   }
   return 0;
 }
+// Prints given struct which is loaded from a directory
 void print_records(struct DirectoryEntry *d) 
 {
   for (int i = 0; i < 16; i++) 
@@ -447,7 +450,6 @@ int main( int argc, char * argv[] )
         continue;
       }
       token[token_count] = strndup( argument_pointer, MAX_COMMAND_SIZE );
-      
       ptr = NULL;
       token_count++;
     }
@@ -685,7 +687,7 @@ int main( int argc, char * argv[] )
       fclose(inpf);
       fclose(outf);  
     }
-    else if(!strcmp(token[0],"PUT"))
+    else if(!strcmp(token[0],"PUT")) // I DON'T THINK THIS WORKS AS INTENDED
     {
       int previousFat = 0;
       struct DirectoryEntry *newD = malloc(sizeof(struct DirectoryEntry));
@@ -907,10 +909,10 @@ int main( int argc, char * argv[] )
       while(nextCluster != -1)
       {
         offset = LBAToOffset(nextCluster,&boot);
-          fseek(fp,offset,SEEK_SET);
-          load_records(dir,fp);
-          print_records(dir);
-          nextCluster = NextLB(nextCluster,&boot,fp);
+        fseek(fp,offset,SEEK_SET);
+        load_records(dir,fp);
+        print_records(dir);
+        nextCluster = NextLB(nextCluster,&boot,fp);
       }
       for(int i = 1;i < total_entries;i++)
       {
@@ -981,9 +983,9 @@ int main( int argc, char * argv[] )
       }
     }
       nextCluster = searchCluster;
-      positionCluster = (position / 512);
-      position = (position % 512);
-      remainingSpace = (512 - position);
+      positionCluster = (position / 512); // Calculate how many clusters needed
+      position = (position % 512);        // Calculate the offset into the last cluster
+      remainingSpace = (512 - position);  // Get remaining space of last cluster
       if(positionCluster > 0)
       {
         for(int j = 0;j < positionCluster;j++)
@@ -998,11 +1000,11 @@ int main( int argc, char * argv[] )
         {
           continue;
         }
-        position += LBAToOffset(nextCluster,&boot);
+        position += LBAToOffset(nextCluster,&boot); 
       }
       else
       {
-        position += LBAToOffset(nextCluster,&boot);
+        position += LBAToOffset(nextCluster,&boot); 
       }
       
       if(token_count == 5)
@@ -1041,7 +1043,7 @@ int main( int argc, char * argv[] )
       offset = LBAToOffset(boot.BPB_RootClus,&boot);
       fseek(fp,offset,SEEK_SET); //Search root dir
       load_records(dir,fp);
-      int searchCluster = delete_file(editPtr,&boot,dir,secondArg,offset);
+      int searchCluster = delete_file(editPtr,&boot,dir,secondArg,offset); // Searches for the specified file and the function deletes
       
       if(searchCluster == -1)
       {
@@ -1097,7 +1099,7 @@ int main( int argc, char * argv[] )
       offset = LBAToOffset(boot.BPB_RootClus,&boot);
       fseek(fp,offset,SEEK_SET); //Search root dir
       load_records(dir,fp);
-      int searchCluster = undelete_file(editPtr,&boot,dir,secondArg,offset,firstLetter);
+      int searchCluster = undelete_file(editPtr,&boot,dir,secondArg,offset,firstLetter); // Searches for the specified file and the function undeletes
       
       if(searchCluster == -1)
       {
@@ -1134,7 +1136,6 @@ int main( int argc, char * argv[] )
               }
               else
               {
-
                 break;
               }
             }
@@ -1148,7 +1149,6 @@ int main( int argc, char * argv[] )
       token[i] = NULL;
     }
     memset(secondArg,0,12);
-    
   } 
   return 0;
 }
