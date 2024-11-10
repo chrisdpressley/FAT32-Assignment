@@ -8,20 +8,20 @@
 #define MAX_COMMAND_SIZE 100
 #define MAX_NUM_ARGUMENTS 5
 
-struct FAT32_Boot           //Offsets:
+struct FAT32_Boot           
 {            
-  char BS_OEMName[8];        // 3
-  int16_t BPB_BytesPerSec;   // 11 
-  int8_t BPB_SecPerClus;     // 13 
-  int16_t BPB_RsvdSecCnt;    // 14
-  int8_t BPB_NumFATS;        // 16
-  int16_t BPB_RootEntCnt;    // 17
-  int32_t BPB_TotSec32;      // 34
-  int16_t BPB_FATSz32;       // 36
-  int16_t BPB_ExtFlags;      // 40
-  int32_t BPB_RootClus;      // 44
-  int16_t BPB_FSInfo;        // 48
-  char BS_VolLab[11];        // 71
+  char BS_OEMName[8];        
+  int16_t BPB_BytesPerSec;    
+  int8_t BPB_SecPerClus;     
+  int16_t BPB_RsvdSecCnt;    
+  int8_t BPB_NumFATS;        
+  int16_t BPB_RootEntCnt;    
+  int32_t BPB_TotSec32;      
+  int16_t BPB_FATSz32;       
+  int16_t BPB_ExtFlags;      
+  int32_t BPB_RootClus;      
+  int16_t BPB_FSInfo;       
+  char BS_VolLab[11];       
   int32_t RootDirSectors;
   int32_t FirstDataSector;
   int32_t FirstSectorofCluster;
@@ -62,13 +62,9 @@ int* load_cluster_addresses(FILE *fp, struct FAT32_Boot *b, int root, int *total
   int *cluster_addresses = malloc(sizeof(int) * 10);  // start with 10 addresses, this is a random amount I chose
   int num_clusters = 1;      //Cluster array starts with the size for later use
   cluster_addresses[0] = 0;  // size is the total number of directory addr.'s
-
-  // Read directory entries from the specified cluster
-  int offset = LBAToOffset(root, b);
+  int offset = LBAToOffset(root, b); // Read directory entries from the specified cluster
   fseek(fp, offset, SEEK_SET);
-
-  // Iterate over the directory entries
-  struct DirectoryEntry entry;
+  struct DirectoryEntry entry; // Iterate over the directory entries
   int next_cluster = root;
   
   while (next_cluster != -1) 
@@ -86,20 +82,15 @@ int* load_cluster_addresses(FILE *fp, struct FAT32_Boot *b, int root, int *total
 
       if (entry.DIR_Attr == 0x10) 
       {
-        // Full cluster
-        int cluster = entry.DIR_FirstClusterLow + (entry.DIR_FirstClusterHigh << 16);
-
-        // Check if the cluster has been visited
-        bool already_visited = false;
+        int cluster = entry.DIR_FirstClusterLow + (entry.DIR_FirstClusterHigh << 16);// Full cluster
+        bool already_visited = false;// Check if the cluster has been visited
         for (int j = 0; j < *visited_clusters; j++) {
             if (cluster_addresses[j] == cluster) {
                 already_visited = true;
                 break;
             }
         }
-        printf("%s: %X: %X\n",entry.DIR_Name,entry.DIR_Attr,cluster);
-        // Add to list if not visited
-        if (!already_visited) 
+        if (!already_visited) // Add to list if not visited
         {
           if (num_clusters >= *total_entries) 
           {
@@ -176,7 +167,6 @@ void load_boot_sector(struct FAT32_Boot * b,FILE *fp)
   fread(&b->BS_VolLab,11,1,fp);
 }
 
-
 char * get_fat_file_name(char * token)
 {
   char * newName = malloc(12 * sizeof(char));
@@ -193,10 +183,6 @@ char * get_fat_file_name(char * token)
   {
     newName[i] = toupper( newName[i] );
   }
-  /*if( strncmp( newName, IMG_Name, 11 ) == 0 )
-  {
-    printf("They matched\n");
-  }*/
   return newName;
 }
 int undelete_file(FILE *fp, struct FAT32_Boot *b, struct DirectoryEntry *d, char *fileName,int clusterAddress, char firstLetter) 
@@ -208,7 +194,7 @@ int undelete_file(FILE *fp, struct FAT32_Boot *b, struct DirectoryEntry *d, char
     {
       if (d[i].DIR_Name[0] == 0xffffffe5) 
       {
-        fwrite(&firstLetter,1,1,fp);
+        fwrite(&firstLetter,1,1,fp);          // Sets first element to whatever was given, (num.txt and tum.txt would both undelete num.txt)
         printf("File '%s' has been undeleted.\n", d[i].DIR_Name);
         return 0; 
       }
@@ -222,6 +208,7 @@ int undelete_file(FILE *fp, struct FAT32_Boot *b, struct DirectoryEntry *d, char
   }
   return -1; // File not found
 }
+
 int delete_file(FILE *fp, struct FAT32_Boot *b, struct DirectoryEntry *d, char *fileName, int clusterAddress) 
 {
   char c = 0xe5;
@@ -230,7 +217,7 @@ int delete_file(FILE *fp, struct FAT32_Boot *b, struct DirectoryEntry *d, char *
   {
     if (strcmp(d[i].DIR_Name, fileName) == 0) 
     {
-      fwrite(&c,1,1,fp);
+      fwrite(&c,1,1,fp);                          // Sets first element to deleted
       printf("File '%s' has been deleted.\n", d[i].DIR_Name);
       return 0; 
     }
@@ -285,7 +272,6 @@ void print_records(struct DirectoryEntry *d)
     } 
   }
 }
-
 //Checks a cluster for the desired file and prints the stat info
 int get_stat_info(struct DirectoryEntry *d,char * searchName)
 {
@@ -299,7 +285,6 @@ int get_stat_info(struct DirectoryEntry *d,char * searchName)
   }
   return -1;
 }
-
 //Writes 512 bytes from the second file to the first(interchangeable so that i don't repeat more code)
 void write_to_cluster_or_file(FILE *outputFile,FILE *inputFile)
 {
@@ -371,7 +356,6 @@ void read_print_to_dec(FILE *fp,int pos,int numBytes,int remainingSpace,struct F
     i++;
   }
 }
-
 void read_print_to_ascii(FILE *fp,int pos,int numBytes,int remainingSpace,struct FAT32_Boot *b,int nextCluster)
 {
   int i = 0;
@@ -875,7 +859,6 @@ int main( int argc, char * argv[] )
             }
           }
         }
-        
         offset = LBAToOffset(emptyCluster,&boot);
         fseek(outf,offset,SEEK_SET);
         write_to_cluster_or_file(outf,inpf);
