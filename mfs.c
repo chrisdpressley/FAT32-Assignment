@@ -8,8 +8,9 @@
 #define MAX_COMMAND_SIZE 100
 #define MAX_NUM_ARGUMENTS 5
 
-struct FAT32_Boot{            //Offsets:
-  char BS_OEMName[8];         // 3
+struct FAT32_Boot           //Offsets:
+{            
+  char BS_OEMName[8];        // 3
   int16_t BPB_BytesPerSec;   // 11 
   int8_t BPB_SecPerClus;     // 13 
   int16_t BPB_RsvdSecCnt;    // 14
@@ -20,13 +21,14 @@ struct FAT32_Boot{            //Offsets:
   int16_t BPB_ExtFlags;      // 40
   int32_t BPB_RootClus;      // 44
   int16_t BPB_FSInfo;        // 48
-  char BS_VolLab[11];         // 71
+  char BS_VolLab[11];        // 71
   int32_t RootDirSectors;
   int32_t FirstDataSector;
   int32_t FirstSectorofCluster;
 };
 
-struct DirectoryEntry {
+struct DirectoryEntry
+{
   char DIR_Name[12];
   int8_t DIR_Attr;
   int8_t Unused[8];
@@ -49,7 +51,7 @@ int16_t NextLB(uint32_t sector,struct FAT32_Boot * b,FILE *fp)
   fread(&val, 2, 1, fp);
   if (val >= 0x0FFFFFF8) 
   {
-        return -1; // End of chain marker
+        return -1; 
   }
   return val;
 }
@@ -110,12 +112,12 @@ int* load_cluster_addresses(FILE *fp, struct FAT32_Boot *b, int root, int *total
           // Recursively load subdirectories
           int *subdir_clusters = load_cluster_addresses(fp, b, cluster, total_entries, visited_clusters);
           
-          // Append the subdir clusters to the main array, starts from j = 1 due to storing the size in the first element
+          // Subdir clusters added to address array, starts from j = 1 due to storing the array size in the first element
           for (int j = 1; j < *total_entries; j++) 
           {
               cluster_addresses[num_clusters + j - 1] = subdir_clusters[j];
           }
-          num_clusters += (*total_entries - 1);  // addr.'s  
+          num_clusters += (*total_entries - 1);  
           free(subdir_clusters);
         }
       }
@@ -146,7 +148,7 @@ void load_records(struct DirectoryEntry *d,FILE *fp)
   }
 }
 
-void load_bootSector_values(struct FAT32_Boot * b,FILE *fp)
+void load_boot_sector(struct FAT32_Boot * b,FILE *fp)
 {
   fseek(fp,3,SEEK_SET);
   fread(&b->BS_OEMName,8,1,fp);
@@ -177,7 +179,6 @@ void load_bootSector_values(struct FAT32_Boot * b,FILE *fp)
 
 char * get_fat_file_name(char * token)
 {
-  //char IMG_Name[11] = "FAT32   IMG";
   char * newName = malloc(12 * sizeof(char));
   memset( newName, ' ', 12 );
   char *fileName = strtok( token, "." );
@@ -198,17 +199,44 @@ char * get_fat_file_name(char * token)
   }*/
   return newName;
 }
-int undelete_file(struct DirectoryEntry *d, char *fileName,char firstLetter)
+int undelete_file(FILE *fp, struct FAT32_Boot *b, struct DirectoryEntry *d, char *fileName,int clusterAddress, char firstLetter) 
 {
-  for(int i = 0;i<16;i++)
+  fseek(fp,clusterAddress,SEEK_SET);
+  for (int i = 0; i < 16; i++) 
   {
-    //printf("%s\n",d[i].DIR_Name);
-    if(!strcmp(d[i].DIR_Name,fileName))
+    if (strcmp(d[i].DIR_Name, fileName) == 0) 
     {
-      d[i].DIR_Name[0] = firstLetter; 
+      if (d[i].DIR_Name[0] == 0xffffffe5) 
+      {
+        fwrite(&firstLetter,1,1,fp);
+        printf("File '%s' has been undeleted.\n", d[i].DIR_Name);
+        return 0; 
+      }
+      else 
+      {
+        printf("File '%s' is not marked as deleted.\n", d[i].DIR_Name);
+        return -1; 
+      }
     }
+    fseek(fp,32,SEEK_CUR);
   }
-  return -1;
+  return -1; // File not found
+}
+int delete_file(FILE *fp, struct FAT32_Boot *b, struct DirectoryEntry *d, char *fileName, int clusterAddress) 
+{
+  char c = 0xe5;
+  fseek(fp,clusterAddress,SEEK_SET);
+  for (int i = 0; i < 16; i++) 
+  {
+    if (strcmp(d[i].DIR_Name, fileName) == 0) 
+    {
+      fwrite(&c,1,1,fp);
+      printf("File '%s' has been deleted.\n", d[i].DIR_Name);
+      return 0; 
+    }
+    fseek(fp,32,SEEK_CUR);
+  }
+  return -1; // File not found
 }
 //Checks a cluster for the desired file and returns the cluster of the file
 int get_file_cluster(struct DirectoryEntry *d, char *fileName)
@@ -223,17 +251,37 @@ int get_file_cluster(struct DirectoryEntry *d, char *fileName)
   }
   return -1;
 }
+int get_empty_directory_entry(FILE *fp,struct DirectoryEntry *d,struct DirectoryEntry *newD)
+{
+  for(int i = 0;i < 16;i++)
+  {
+    if(d[i].DIR_Name[0] == 0x000000)
+    {
+      fwrite(&newD->DIR_Name,11,1,fp);
+      newD->DIR_Name[11] = '\0';
+      fwrite(&newD->DIR_Attr,1,1,fp);
+      fseek(fp,8,SEEK_CUR);
+      fwrite(&newD->DIR_FirstClusterHigh,2,1,fp);
+      fseek(fp,4,SEEK_CUR);
+      fwrite(&newD->DIR_FirstClusterLow,2,1,fp);
+      fwrite(&newD->DIR_FileSize,4,1,fp);
+      return 1;
+    }
+    fseek(fp,4,SEEK_CUR);
+  }
+  return 0;
+}
 void print_records(struct DirectoryEntry *d) 
 {
   for (int i = 0; i < 16; i++) 
   {
     if (d[i].DIR_Attr == 0x01 || d[i].DIR_Attr == 0x10 || d[i].DIR_Attr == 0x20)
     { 
-      if(d[i].DIR_Name[0] == 0xe5 || d[i].DIR_Name[0] == 0x00)
+      if(d[i].DIR_Name[0] == 0xffffffe5 || d[i].DIR_Name[0] == 0x00)
       {
         continue;
       }
-      printf("%s\n", d[i].DIR_Name);
+      printf("%s,%c\n", d[i].DIR_Name,d[i].DIR_Name[0]);
     } 
   }
 }
@@ -252,7 +300,8 @@ int get_stat_info(struct DirectoryEntry *d,char * searchName)
   return -1;
 }
 
-void write_binary_cluster_to_file(FILE *outputFile,FILE *inputFile)
+//Writes 512 bytes from the second file to the first(interchangeable so that i don't repeat more code)
+void write_to_cluster_or_file(FILE *outputFile,FILE *inputFile)
 {
   int i = 0;
   char c;
@@ -260,9 +309,9 @@ void write_binary_cluster_to_file(FILE *outputFile,FILE *inputFile)
   while(i < 512)
   {
     c = fgetc(inputFile);
-    if (feof(inputFile)) 
+    if (feof(inputFile))      
     {
-      break; // Stop when end of file is reached
+      break; 
     }
     fwrite(&c,1,1,outputFile);
     i++;
@@ -272,10 +321,8 @@ void read_print_to_hex(FILE *fp,int pos,int numBytes,int remainingSpace,struct F
 {
   int i = 0;
   char c;
-  
   fseek(fp,pos,SEEK_SET);
 
-  
   while(i < numBytes)
   {
     if(remainingSpace == 0)
@@ -301,10 +348,8 @@ void read_print_to_dec(FILE *fp,int pos,int numBytes,int remainingSpace,struct F
 {
   int i = 0;
   char c;
-  
   fseek(fp,pos,SEEK_SET);
 
-  
   while(i < numBytes)
   {
     if(remainingSpace == 0)
@@ -333,7 +378,6 @@ void read_print_to_ascii(FILE *fp,int pos,int numBytes,int remainingSpace,struct
   char c;
   fseek(fp,pos,SEEK_SET);
 
-  
   while(i < numBytes)
   {
     if(remainingSpace == 0)
@@ -356,12 +400,45 @@ void read_print_to_ascii(FILE *fp,int pos,int numBytes,int remainingSpace,struct
     i++;
   }
 }
-
+int get_file_size(FILE *fp)
+{
+  fseek(fp, 0, SEEK_END); 
+  long size = ftell(fp); 
+  fclose(fp);
+  return size;
+}
+int find_empty_cluster(FILE *fp, struct FAT32_Boot *b)
+{
+  int offset = (b->BPB_RsvdSecCnt * b->BPB_BytesPerSec);
+  int clusterNumber = 0;
+  fseek(fp, offset, SEEK_SET);
+  int fatEntry;
+  fread(&fatEntry,2, 1, fp);
+  int numClusters = (b->BPB_TotSec32 - (b->BPB_RsvdSecCnt + (b->BPB_NumFATS * b->BPB_FATSz32)));
+  while(clusterNumber < numClusters)
+  {
+    printf("%d\n",fatEntry);
+    if (fatEntry == 0x00) 
+    {
+      printf("%d*\n",clusterNumber);
+      return ((clusterNumber - 2) * b->BPB_BytesPerSec) + (b->BPB_RsvdSecCnt * b->BPB_BytesPerSec); //Returns the LBA
+    }
+    offset += 4;
+    fseek(fp,offset,SEEK_SET);
+    clusterNumber++;
+  }
+  return -1;
+}
+int get_fat_entry_offset(struct FAT32_Boot *b,int lba)
+{
+  return (((lba - (b->BPB_RsvdSecCnt * b->BPB_BytesPerSec)) / b->BPB_BytesPerSec) + 2);
+}
 int main( int argc, char * argv[] )
 {
   FILE *fp = NULL;
   struct FAT32_Boot boot;
   struct DirectoryEntry *dir = malloc(16* sizeof(struct DirectoryEntry));
+  bool closeFlag = false;
   int visited_clusters = 0;
   int *clusterAdresses = NULL;
   int nextCluster = 0;
@@ -369,14 +446,9 @@ int main( int argc, char * argv[] )
   char *currentImage = NULL;
   char *ptr = NULL;
   int imageSize; 
-  printf("%d, %d, %d, %d\n",(10/512),(616/512),(10 % 512),(614 % 512));
+
   for( ; ; )
   {
-    if(fp != NULL)
-    {
-      fseek(fp,((boot.BPB_NumFATS * boot.BPB_FATSz32 * boot.BPB_BytesPerSec) 
-            + (boot.BPB_RsvdSecCnt * boot.BPB_BytesPerSec)),SEEK_SET);
-    }
     char secondArg[12];
     char * command_string = (char*) malloc( MAX_COMMAND_SIZE );
     char *argument_pointer;
@@ -394,50 +466,85 @@ int main( int argc, char * argv[] )
         continue;
       }
       token[token_count] = strndup( argument_pointer, MAX_COMMAND_SIZE );
+      
+      ptr = NULL;
       token_count++;
     }
+    if(token[0] == NULL)
+    {
+      continue;
+    }
+    if(closeFlag)
+    {
+      ptr = token[0];
+      while(*ptr)
+      {
+        *ptr = toupper((unsigned char)*ptr);
+        ptr++;
+      }if(!strcmp(token[0],"QUIT") || !strcmp(token[0],"EXIT") )
+      {
+        return 0;
+      }
+      else if(strcmp(token[0],"OPEN"))
+      {
+        printf("Error: File system image must be opened first.\n");
+        continue;
+      }
+    }
+    else
+    {
+      ptr = token[0];
+      while(*ptr)
+      {
+        *ptr = toupper((unsigned char)*ptr);
+        ptr++;
+      }
+    }
 
-
-    if((!strcmp(token[0],"exit")) || (!strcmp(token[0],"quit")))
+    if((!strcmp(token[0],"EXIT")) || (!strcmp(token[0],"QUIT")))
     {
       return 0;
     }
-
-
     if(token[1] != NULL)
     {
       strcpy(secondArg,token[1]);
     }
 
-    if(!strcmp(token[0],"open"))
+    if(!strcmp(token[0],"OPEN"))
     {
       if(fp == NULL)
       {
         fp = fopen(secondArg,"r");
         if(fp == NULL)
         {
-          printf("File not found");
+          printf("Error: File system image not found.");
           continue;
         }
         currentImage = strdup(secondArg);
-        load_bootSector_values(&boot,fp);
+        load_boot_sector(&boot,fp);
         imageSize = ((boot.BPB_NumFATS * boot.BPB_FATSz32 * boot.BPB_BytesPerSec) //Size of rsvd sec + size of fats + (size of sec * num clusters)
                   + (boot.BPB_RsvdSecCnt * boot.BPB_BytesPerSec) + (boot.BPB_SecPerClus * boot.BPB_BytesPerSec) //spent at least an hour figuring this out
                   * (boot.BPB_TotSec32 - (boot.BPB_RsvdSecCnt + (boot.BPB_NumFATS * boot.BPB_FATSz32))));
         printf("%d\n",imageSize);
         clusterAdresses = load_cluster_addresses(fp,&boot,boot.BPB_RootClus,&total_entries, &visited_clusters);
-
-        for(int i = 1;i < total_entries;i++)
+        closeFlag = false;
+        /*for(int i = 1;i < total_entries;i++)
         {
           printf("%X, ",clusterAdresses[i]);
-        }
+        }*/
       }
       else
       {
         printf("File already open.");
       }
     }
-    else if(!strcmp(token[0],"save"))
+    else if(!strcmp(token[0],"CLOSE"))
+    {
+      fclose(fp);
+      fp = NULL;
+      closeFlag = true;
+    }
+    else if(!strcmp(token[0],"SAVE"))
     {
       if(token_count > 1)
       {
@@ -468,7 +575,7 @@ int main( int argc, char * argv[] )
         }
       }
     }
-    else if(!strcmp(token[0],"info"))
+    else if(!strcmp(token[0],"INFO"))
     {
       printf("BPB_BytesPerSec:\t%d\t%X\n",boot.BPB_BytesPerSec,boot.BPB_BytesPerSec);
       printf("BPB_SecPerClus:\t%d\t%X\n",boot.BPB_SecPerClus,boot.BPB_SecPerClus);
@@ -479,7 +586,7 @@ int main( int argc, char * argv[] )
       printf("BPB_RootClus:\t\t%d\t%X\n",boot.BPB_RootClus,boot.BPB_RootClus);
       printf("BPB_FSInfo:\t\t%d\t%X\n",boot.BPB_FSInfo,boot.BPB_FSInfo);
     }
-    else if(!strcmp(token[0],"stat"))
+    else if(!strcmp(token[0],"STAT"))
     {
       int offset;
       int nextCluster = 0;
@@ -533,7 +640,7 @@ int main( int argc, char * argv[] )
       }
     }
     }
-    else if(!strcmp(token[0],"get"))
+    else if(!strcmp(token[0],"GET"))
     {
       int offset;
       int nextCluster = 0;
@@ -594,7 +701,7 @@ int main( int argc, char * argv[] )
       offset = LBAToOffset(searchCluster,&boot);  //Opens cluster address from the successfully found file
       printf("%d | %d\n",nextCluster,offset);
       fseek(inpf,offset,SEEK_SET);
-      write_binary_cluster_to_file(outf,inpf);
+      write_to_cluster_or_file(outf,inpf);
 
       nextCluster = NextLB(searchCluster,&boot,fp); //Get next cluster address
       printf("%d | %d\n",nextCluster,offset);
@@ -603,18 +710,193 @@ int main( int argc, char * argv[] )
         offset = LBAToOffset(nextCluster,&boot);
         
         fseek(inpf,offset,SEEK_SET);
-        write_binary_cluster_to_file(outf,inpf);
+        write_to_cluster_or_file(outf,inpf);
         nextCluster = NextLB(nextCluster,&boot,fp);
       }
       fclose(inpf);
-      fclose(outf);
-        
+      fclose(outf);  
     }
-    else if(!strcmp(token[0],"put"))
+    else if(!strcmp(token[0],"PUT"))
     {
-      
+      int previousFat = 0;
+      struct DirectoryEntry *newD = malloc(sizeof(struct DirectoryEntry));
+      int offset = 0;
+      int emptyCluster = find_empty_cluster(fp,&boot);
+      if(emptyCluster == -1)
+      {
+        printf("Error: No empty clusters.\n");
+      }
+      if(token_count == 2)
+      {
+        char *fileName = strdup(token[1]);
+        strcpy(secondArg,get_fat_file_name(token[1]));
+        FILE *inpf = fopen(fileName,"r+b");
+        FILE *outf = fopen(currentImage,"r+b");
+        int fileSize = get_file_size(inpf);
+        int amountClustersNeeded = (fileSize / 512);
+        offset = LBAToOffset(boot.BPB_RootClus,&boot);
+        fseek(fp,offset,SEEK_SET); //Search root dir
+        load_records(dir,fp);
+    
+        strncpy(newD->DIR_Name,secondArg,11);
+        newD->DIR_Attr = 0x01;
+        newD->DIR_FirstClusterHigh = (int16_t)(emptyCluster >> 16);
+        newD->DIR_FirstClusterLow = (int16_t)(emptyCluster & 0xFFFF);
+        newD->DIR_FileSize = fileSize;
+
+        int found = get_empty_directory_entry(fp,dir,newD);
+        if(!found)
+        {
+          nextCluster = NextLB(boot.BPB_RootClus,&boot,fp);
+          printf("%d\n",nextCluster);
+          while(nextCluster != -1)
+          {
+            offset = LBAToOffset(nextCluster,&boot);
+            fseek(fp,offset,SEEK_SET);
+            load_records(dir,fp);
+            found = get_empty_directory_entry(fp,dir,newD);
+            if(!found)
+            {
+              nextCluster = NextLB(nextCluster,&boot,fp);
+            }
+            else
+            {
+              break;
+            }
+          }
+          if(nextCluster == -1)
+          {
+            for(int i = 1;i < total_entries;i++)
+            {
+              nextCluster = clusterAdresses[i];
+              while(nextCluster != -1)
+              {
+                offset = LBAToOffset(nextCluster,&boot);
+                fseek(fp,offset,SEEK_SET);
+                load_records(dir,fp);
+                found = get_empty_directory_entry(fp,dir,newD);
+                if(!found)
+                {
+                  nextCluster = NextLB(nextCluster,&boot,fp);
+                }
+                else
+                {
+                  break;
+                }
+              }
+            }
+          }
+        }
+        offset = LBAToOffset(emptyCluster,&boot);
+        fseek(outf,offset,SEEK_SET);
+        write_to_cluster_or_file(outf,inpf);
+        for(int i = 0;i < amountClustersNeeded;i++)
+        {
+          emptyCluster = find_empty_cluster(fp,&boot);
+          offset = LBAToOffset(emptyCluster,&boot);
+          fseek(outf,offset,SEEK_SET);
+          write_to_cluster_or_file(outf,inpf);
+          if(i == (amountClustersNeeded - 1))
+          {
+            int j = -1;
+            previousFat = ((get_fat_entry_offset(&boot,emptyCluster) * 4) + (boot.BPB_BytesPerSec * boot.BPB_RsvdSecCnt));
+            fseek(outf,previousFat,SEEK_SET);
+            fwrite(&j,2,1,outf);
+          }
+          else
+          {
+            nextCluster = find_empty_cluster(fp,&boot);
+            previousFat = ((get_fat_entry_offset(&boot,emptyCluster) * 4) + (boot.BPB_BytesPerSec * boot.BPB_RsvdSecCnt));
+            fseek(outf,previousFat,SEEK_SET);
+            fwrite(&nextCluster,2,1,outf);
+          }
+          
+        }
+        
+      }
+      else if(token_count == 3)
+      {
+        char *fileName = strdup(token[1]);
+        strcpy(secondArg,get_fat_file_name(token[2]));
+        FILE *inpf = fopen(fileName,"r+b");
+        FILE *outf = fopen(currentImage,"r+b");
+        int fileSize = get_file_size(inpf);
+        int amountClustersNeeded = (fileSize / 512);
+        offset = LBAToOffset(boot.BPB_RootClus,&boot);
+        fseek(fp,offset,SEEK_SET); //Search root dir
+        load_records(dir,fp);
+    
+        strncpy(newD->DIR_Name,secondArg,11);
+        newD->DIR_Attr = 0x01;
+        newD->DIR_FirstClusterHigh = (int16_t)(emptyCluster >> 16);
+        newD->DIR_FirstClusterLow = (int16_t)(emptyCluster & 0xFFFF);
+        newD->DIR_FileSize = fileSize;
+
+        int found = get_empty_directory_entry(fp,dir,newD);
+        if(!found)
+        {
+          nextCluster = NextLB(boot.BPB_RootClus,&boot,fp);
+          printf("%d\n",nextCluster);
+          while(nextCluster != -1)
+          {
+            offset = LBAToOffset(nextCluster,&boot);
+            fseek(fp,offset,SEEK_SET);
+            load_records(dir,fp);
+            found = get_empty_directory_entry(fp,dir,newD);
+            if(!found)
+            {
+              nextCluster = NextLB(nextCluster,&boot,fp);
+            }
+            else
+            {
+              break;
+            }
+          }
+          if(nextCluster == -1)
+          {
+            for(int i = 1;i < total_entries;i++)
+            {
+              nextCluster = clusterAdresses[i];
+              while(nextCluster != -1)
+              {
+                offset = LBAToOffset(nextCluster,&boot);
+                fseek(fp,offset,SEEK_SET);
+                load_records(dir,fp);
+                found = get_empty_directory_entry(fp,dir,newD);
+                if(!found)
+                {
+                  nextCluster = NextLB(nextCluster,&boot,fp);
+                }
+                else
+                {
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        offset = LBAToOffset(emptyCluster,&boot);
+        fseek(outf,offset,SEEK_SET);
+        write_to_cluster_or_file(outf,inpf);
+        for(int i = 0;i < amountClustersNeeded;i++)
+        {
+          emptyCluster = find_empty_cluster(fp,&boot);
+          offset = LBAToOffset(emptyCluster,&boot);
+          fseek(outf,offset,SEEK_SET);
+          write_to_cluster_or_file(outf,inpf);
+            nextCluster = find_empty_cluster(fp,&boot);
+          previousFat = ((get_fat_entry_offset(&boot,emptyCluster) * 4) + (boot.BPB_BytesPerSec * boot.BPB_RsvdSecCnt));
+          fseek(outf,previousFat,SEEK_SET);
+          fwrite(&nextCluster,2,1,outf);
+        }
+      }
+      else
+      {
+        printf("Error: Incorrect command format.\n");
+      }
     }
-    else if(!strcmp(token[0],"cd"))
+    else if(!strcmp(token[0],"CD"))
     {
       char *path = malloc(MAX_COMMAND_SIZE*sizeof(char));
       if(chdir(token[1]) != 0)
@@ -624,12 +906,11 @@ int main( int argc, char * argv[] )
       else
       {
         ptr = getcwd(path,MAX_COMMAND_SIZE);
-        printf("%s\n",ptr);
+        printf("New Directory: %s\n",ptr);  
       }
     }
-    else if (!strcmp(token[0], "ls")) 
+    else if (!strcmp(token[0], "LS")) 
     {
-      // Start from the root directory (BPB_RootClus is the starting cluster for the root)
       nextCluster = boot.BPB_RootClus;
       int offset = 0;
       while(nextCluster != -1)
@@ -653,7 +934,7 @@ int main( int argc, char * argv[] )
         }
       }
     }
-    else if(!strcmp(token[0],"read"))
+    else if(!strcmp(token[0],"READ"))
     {//read <filename> <position> <number of bytes> <OPTION>
       int offset = 0;
       char *optionFlag = NULL;
@@ -738,11 +1019,17 @@ int main( int argc, char * argv[] )
       if(token_count == 5)
       {
         optionFlag = strdup(token[4]);
-        if(!strcmp(optionFlag,"-ascii"))
+        ptr = optionFlag;
+        while(*ptr)
+        {
+          *ptr = toupper((unsigned char)*ptr);
+          ptr++;
+        }
+        if(!strcmp(optionFlag,"-ASCII"))
         {
           read_print_to_ascii(fp,position,numBytes,remainingSpace,&boot,nextCluster);
         }
-        else if(!strcmp(optionFlag,"-dec"))
+        else if(!strcmp(optionFlag,"-DEC"))
         {
           read_print_to_dec(fp,position,numBytes,remainingSpace,&boot,nextCluster);
         }
@@ -756,22 +1043,15 @@ int main( int argc, char * argv[] )
         read_print_to_hex(fp,position,numBytes,remainingSpace,&boot,nextCluster);
       }
     }
-    else if(!strcmp(token[0],"del"))
-    {
-      
-    }
-    else if(!strcmp(token[0],"undel"))
+    else if(!strcmp(token[0],"DEL"))
     {
       int offset = 0;
-      
+      FILE *editPtr = fopen(currentImage,"r+b");
       strcpy(secondArg,get_fat_file_name(token[1]));
-      char firstLetter = secondArg[0];
-      secondArg[0] = 0xe5;
-      printf("|%s|",secondArg);
       offset = LBAToOffset(boot.BPB_RootClus,&boot);
       fseek(fp,offset,SEEK_SET); //Search root dir
       load_records(dir,fp);
-      int searchCluster = undelete_file(dir,secondArg,firstLetter);
+      int searchCluster = delete_file(editPtr,&boot,dir,secondArg,offset);
       
       if(searchCluster == -1)
       {
@@ -782,7 +1062,7 @@ int main( int argc, char * argv[] )
           offset = LBAToOffset(nextCluster,&boot);
           fseek(fp,offset,SEEK_SET);
           load_records(dir,fp);
-          searchCluster = undelete_file(dir,secondArg,firstLetter);
+          searchCluster = delete_file(editPtr,&boot,dir,secondArg,offset);
           if(searchCluster == -1 )
           {
             nextCluster = NextLB(nextCluster,&boot,fp);
@@ -802,7 +1082,7 @@ int main( int argc, char * argv[] )
               offset = LBAToOffset(nextCluster,&boot);
               fseek(fp,offset,SEEK_SET);
               load_records(dir,fp);
-              searchCluster = undelete_file(dir,secondArg,firstLetter);
+              searchCluster = delete_file(editPtr,&boot,dir,secondArg,offset);
               if(searchCluster == -1 )
               {
                 nextCluster = NextLB(nextCluster,&boot,fp);
@@ -813,10 +1093,74 @@ int main( int argc, char * argv[] )
                 break;
               }
             }
+          }
         }
       }
+      fclose(editPtr);
     }
+    else if(!strcmp(token[0],"UNDEL"))  
+    {
+      int offset = 0;
+      FILE *editPtr = fopen(currentImage,"r+b");
+      strcpy(secondArg,get_fat_file_name(token[1]));
+      char firstLetter = secondArg[0];
+      secondArg[0] = 0xe5;
+      offset = LBAToOffset(boot.BPB_RootClus,&boot);
+      fseek(fp,offset,SEEK_SET); //Search root dir
+      load_records(dir,fp);
+      int searchCluster = undelete_file(editPtr,&boot,dir,secondArg,offset,firstLetter);
+      
+      if(searchCluster == -1)
+      {
+        nextCluster = NextLB(boot.BPB_RootClus,&boot,fp);
+        printf("%d\n",nextCluster);
+        while(nextCluster != -1)
+        {
+          offset = LBAToOffset(nextCluster,&boot);
+          fseek(fp,offset,SEEK_SET);
+          load_records(dir,fp);
+          searchCluster = undelete_file(editPtr,&boot,dir,secondArg,offset,firstLetter);
+          if(searchCluster == -1 )
+          {
+            nextCluster = NextLB(nextCluster,&boot,fp);
+          }
+          else
+          {
+            break;
+          }
+        }
+        if(nextCluster == -1)
+        {
+          for(int i = 1;i < total_entries;i++)
+          {
+            nextCluster = clusterAdresses[i];
+            while(nextCluster != -1)
+            {
+              offset = LBAToOffset(nextCluster,&boot);
+              fseek(fp,offset,SEEK_SET);
+              load_records(dir,fp);
+              searchCluster = undelete_file(editPtr,&boot,dir,secondArg,offset,firstLetter);
+              if(searchCluster == -1 )
+              {
+                nextCluster = NextLB(nextCluster,&boot,fp);
+              }
+              else
+              {
+
+                break;
+              }
+            }
+          }
+        }
+      }
+      fclose(editPtr);
     }
+    for(int i = 0;i < MAX_NUM_ARGUMENTS;i++)
+    {
+      token[i] = NULL;
+    }
+    memset(secondArg,0,12);
+    
   } 
   return 0;
 }
