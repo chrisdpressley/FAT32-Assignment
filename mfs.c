@@ -305,15 +305,16 @@ void write_to_cluster_or_file(FILE *outputFile,FILE *inputFile)
     i++;
   }
 }
+// Prints from the image to terminal
 void read_print_to_hex(FILE *fp,int pos,int numBytes,int remainingSpace,struct FAT32_Boot *b,int nextCluster)
 {
   int i = 0;
   char c;
-  fseek(fp,pos,SEEK_SET);
+  fseek(fp,pos,SEEK_SET); // Seeks to the starting cluster position
 
-  while(i < numBytes)
+  while(i < numBytes) // I < total bytes to be read
   {
-    if(remainingSpace == 0)
+    if(remainingSpace == 0) // Out of space in current cluster (if first iteration it is 512 - specified offset into)
     {
       nextCluster = NextLB(nextCluster,b,fp);
       if(nextCluster == -1)
@@ -332,6 +333,7 @@ void read_print_to_hex(FILE *fp,int pos,int numBytes,int remainingSpace,struct F
     i++;
   }
 }
+// Prints the same way as previous except to ascii
 void read_print_to_dec(FILE *fp,int pos,int numBytes,int remainingSpace,struct FAT32_Boot *b,int nextCluster)
 {
   int i = 0;
@@ -359,6 +361,7 @@ void read_print_to_dec(FILE *fp,int pos,int numBytes,int remainingSpace,struct F
     i++;
   }
 }
+// Prints the same way as previous except to ascii
 void read_print_to_ascii(FILE *fp,int pos,int numBytes,int remainingSpace,struct FAT32_Boot *b,int nextCluster)
 {
   int i = 0;
@@ -387,7 +390,7 @@ void read_print_to_ascii(FILE *fp,int pos,int numBytes,int remainingSpace,struct
     i++;
   }
 }
-
+// Gets the file size yo
 int get_file_size(FILE *fp)
 {
   fseek(fp, 0, SEEK_END); 
@@ -395,7 +398,7 @@ int get_file_size(FILE *fp)
   fclose(fp);
   return size;
 }
-
+// Finds and empty FAT entry and returns it
 int find_empty_cluster(FILE *fp, struct FAT32_Boot *b)
 {
   int offset = (b->BPB_RsvdSecCnt * b->BPB_BytesPerSec);
@@ -430,7 +433,6 @@ int main( int argc, char * argv[] )
   int *clusterAdresses = NULL;
   char *currentImage = NULL;
   char *ptr = NULL;
-  
 
   for( ; ; )
   {
