@@ -246,7 +246,6 @@ int get_empty_directory_entry(FILE *fp,struct DirectoryEntry *d,struct Directory
     if(d[i].DIR_Name[0] == 0x000000)
     {
       fwrite(&newD->DIR_Name,11,1,fp);
-      newD->DIR_Name[11] = '\0';
       fwrite(&newD->DIR_Attr,1,1,fp);
       fseek(fp,8,SEEK_CUR);
       fwrite(&newD->DIR_FirstClusterHigh,2,1,fp);
@@ -255,7 +254,7 @@ int get_empty_directory_entry(FILE *fp,struct DirectoryEntry *d,struct Directory
       fwrite(&newD->DIR_FileSize,4,1,fp);
       return 1;
     }
-    fseek(fp,4,SEEK_CUR);
+    fseek(fp,32,SEEK_CUR);
   }
   return 0;
 }
@@ -408,7 +407,7 @@ int find_empty_cluster(FILE *fp, struct FAT32_Boot *b)
   int numClusters = (b->BPB_TotSec32 - (b->BPB_RsvdSecCnt + (b->BPB_NumFATS * b->BPB_FATSz32)));
   while(clusterNumber < numClusters)
   {
-    if (fatEntry == 0x00000000) 
+    if (fatEntry == 0) 
     {
       return clusterNumber;   // returns LBA
     }
@@ -741,6 +740,7 @@ int main( int argc, char * argv[] )
         newD->DIR_FirstClusterLow = (int16_t)(emptyCluster & 0xFFFF);
         newD->DIR_FileSize = fileSize;
 
+        fseek(fp,offset,SEEK_SET);
         int found = get_empty_directory_entry(fp,dir,newD); // Gets the empty directory entry by searching each directory starting from root
         if(!found)
         {
@@ -750,6 +750,7 @@ int main( int argc, char * argv[] )
             offset = LBAToOffset(nextCluster,&boot);
             fseek(fp,offset,SEEK_SET);
             load_records(dir,fp);
+            fseek(fp,offset,SEEK_SET);
             found = get_empty_directory_entry(fp,dir,newD);
             if(!found)
             {
@@ -770,6 +771,7 @@ int main( int argc, char * argv[] )
                 offset = LBAToOffset(nextCluster,&boot);
                 fseek(fp,offset,SEEK_SET);
                 load_records(dir,fp);
+                fseek(fp,offset,SEEK_SET);
                 found = get_empty_directory_entry(fp,dir,newD);
                 if(!found)
                 {
@@ -855,6 +857,7 @@ int main( int argc, char * argv[] )
             offset = LBAToOffset(nextCluster,&boot);
             fseek(fp,offset,SEEK_SET);
             load_records(dir,fp);
+            fseek(fp,offset,SEEK_SET);
             found = get_empty_directory_entry(fp,dir,newD);
             if(!found)
             {
@@ -875,6 +878,7 @@ int main( int argc, char * argv[] )
                 offset = LBAToOffset(nextCluster,&boot);
                 fseek(fp,offset,SEEK_SET);
                 load_records(dir,fp);
+                fseek(fp,offset,SEEK_SET);
                 found = get_empty_directory_entry(fp,dir,newD);
                 if(!found)
                 {
