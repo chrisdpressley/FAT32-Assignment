@@ -405,16 +405,17 @@ int find_empty_cluster(FILE *fp, struct FAT32_Boot *b)
   int clusterNumber = 0;
   fseek(fp, offset, SEEK_SET);
   int fatEntry;
-  fread(&fatEntry,2, 1, fp);
+  fread(&fatEntry,4, 1, fp);
   int numClusters = (b->BPB_TotSec32 - (b->BPB_RsvdSecCnt + (b->BPB_NumFATS * b->BPB_FATSz32)));
   while(clusterNumber < numClusters)
   {
-    if (fatEntry == 0x00) 
+    if (fatEntry == 0x00000000) 
     {
       return clusterNumber;   // returns LBA
     }
     offset += 4;
     fseek(fp,offset,SEEK_SET);
+    fread(&fatEntry,4,1,fp);
     clusterNumber++;
   }
   return -1;
@@ -425,7 +426,7 @@ int main( int argc, char * argv[] )
   FILE *fp = NULL;
   struct FAT32_Boot boot;
   struct DirectoryEntry *dir = malloc(16* sizeof(struct DirectoryEntry));
-  bool closeFlag = false;
+  bool closeFlag = true;    // Starts true so that a file image must be open before any commands
   int visited_clusters = 0;
   int nextCluster = 0;
   int total_entries = 0;
@@ -504,7 +505,7 @@ int main( int argc, char * argv[] )
         fp = fopen(secondArg,"r");
         if(fp == NULL)
         {
-          printf("Error: File system image not found.");
+          printf("Error: File system image not found.\n");
           continue;
         }
         currentImage = strdup(secondArg); // Used in multiple functionalities
@@ -517,7 +518,7 @@ int main( int argc, char * argv[] )
       }
       else
       {
-        printf("File already open.");
+        printf("File already open.\n");
       }
     }
     else if(!strcmp(token[0],"CLOSE"))
@@ -538,7 +539,7 @@ int main( int argc, char * argv[] )
         size_t written = fwrite(buffer, 1, imageSize, outputFile); // Writes buffer to new file
         if(written == imageSize)
         {
-          printf("Successfully written to new file");
+          printf("Successfully written to new file.\n");
         }
         fclose(inputFile);
         fclose(outputFile);
@@ -578,8 +579,8 @@ int main( int argc, char * argv[] )
       load_records(dir,fp);
       int searchCluster = get_stat_info(dir,secondArg); // Search for desired file in root directory
       
-      if(searchCluster == -1)     // ********This is how I am handling searching directories, multiple commands make use ******
-      {                           // ********of a version of this code, it has some nested loops and is probably not very efficient******
+      if(searchCluster == -1)     // ********This is how I am handling searching directories, multiple commands make use of a version ******
+      {                           // ********of this code, it has some nested loops and is probably not very efficient ******
         nextCluster = NextLB(boot.BPB_RootClus,&boot,fp); // Wasn't found in first clust of root so next cluster of root
         while(nextCluster != -1)  // If the next cluster of root isn't -1 we loop till the end of it
         {
@@ -719,11 +720,10 @@ int main( int argc, char * argv[] )
         newD->DIR_FirstClusterLow = (int16_t)(emptyCluster & 0xFFFF);
         newD->DIR_FileSize = fileSize;
 
-        int found = get_empty_directory_entry(fp,dir,newD); // Gets the empty directory entyr by searching each directory starting from root
+        int found = get_empty_directory_entry(fp,dir,newD); // Gets the empty directory entry by searching each directory starting from root
         if(!found)
         {
           nextCluster = NextLB(boot.BPB_RootClus,&boot,fp);
-          printf("%d\n",nextCluster);
           while(nextCluster != -1)
           {
             offset = LBAToOffset(nextCluster,&boot);
@@ -761,17 +761,14 @@ int main( int argc, char * argv[] )
               }
             }
           }
-        }
-        previousFat = ((emptyCluster * 4) + (boot.BPB_BytesPerSec * boot.BPB_RsvdSecCnt));//Go to empty address
-        fseek(outf,previousFat,SEEK_SET);
-        fwrite(&boot.BPB_RootClus,4,1,outf);  // Write root LBA to it
+        } 
         offset = LBAToOffset(emptyCluster,&boot);
         fseek(outf,offset,SEEK_SET);
         write_to_cluster_or_file(outf,inpf);  // Write data in the cluster of the first empty fat
         nextCluster = find_empty_cluster(fp,&boot);
-        previousFat = ((nextCluster * 4) + (boot.BPB_BytesPerSec * boot.BPB_RsvdSecCnt));
+        previousFat = ((emptyCluster * 4) + (boot.BPB_BytesPerSec * boot.BPB_RsvdSecCnt));
         fseek(outf,previousFat,SEEK_SET);
-        fwrite(&emptyCluster,4,1,outf);              // Write to previous fat address the new fat address
+        fwrite(&nextCluster,4,1,outf);              // Write to previous fat address the new fat address
         for(int i = 0;i < amountClustersNeeded;i++) // Repeat until all clusters are loaded
         {
           emptyCluster = find_empty_cluster(fp,&boot);
@@ -788,14 +785,14 @@ int main( int argc, char * argv[] )
           else
           {
             nextCluster = find_empty_cluster(fp,&boot);
-            previousFat = ((nextCluster * 4) + (boot.BPB_BytesPerSec * boot.BPB_RsvdSecCnt));
+            previousFat = ((emptyCluster * 4) + (boot.BPB_BytesPerSec * boot.BPB_RsvdSecCnt));
             fseek(outf,previousFat,SEEK_SET);
-            fwrite(&emptyCluster,4,1,outf);
+            fwrite(&nextCluster,4,1,outf);
           }
-          fclose(inpf);
-          fclose(outf);
+          
         }
-        
+        fclose(inpf);
+        fclose(outf);
       }
       else if(token_count == 3)
       {
