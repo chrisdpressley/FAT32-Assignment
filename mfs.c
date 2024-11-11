@@ -565,7 +565,7 @@ int main( int argc, char * argv[] )
         size_t written = fwrite(buffer, 1, imageSize, outputFile);
         if(written == imageSize)
         {
-          printf("Successfully written to same file");
+          printf("Successfully written to same file.\n");
         }
       }
     }
@@ -684,23 +684,33 @@ int main( int argc, char * argv[] )
         }
       }
     }
-      FILE *outf = fopen(newFileName,"w");
-      FILE *inpf = fopen(currentImage,"rb");
-      offset = LBAToOffset(searchCluster,&boot);  //Opens cluster address from the successfully found file
+    if(searchCluster == -1)
+    {
+      printf("Error: No file with that name.\n");
+      for(int i = 0;i < MAX_NUM_ARGUMENTS;i++) // No ghost args
+      {
+        token[i] = NULL;
+      }
+      memset(secondArg,0,12);
+      continue;
+    } 
+    FILE *outf = fopen(newFileName,"w");
+    FILE *inpf = fopen(currentImage,"rb");
+    offset = LBAToOffset(searchCluster,&boot);  //Opens cluster address from the successfully found file
+    fseek(inpf,offset,SEEK_SET);
+    write_to_cluster_or_file(outf,inpf);
+
+    nextCluster = NextLB(searchCluster,&boot,fp); //Get next cluster address
+    while(nextCluster != -1)                    //If not eof loop to get rest of file
+    {
+      offset = LBAToOffset(nextCluster,&boot);
+      
       fseek(inpf,offset,SEEK_SET);
       write_to_cluster_or_file(outf,inpf);
-
-      nextCluster = NextLB(searchCluster,&boot,fp); //Get next cluster address
-      while(nextCluster != -1)                    //If not eof loop to get rest of file
-      {
-        offset = LBAToOffset(nextCluster,&boot);
-        
-        fseek(inpf,offset,SEEK_SET);
-        write_to_cluster_or_file(outf,inpf);
-        nextCluster = NextLB(nextCluster,&boot,fp);
-      }
-      fclose(inpf);
-      fclose(outf);  
+      nextCluster = NextLB(nextCluster,&boot,fp);
+    }
+    fclose(inpf);
+    fclose(outf);  
     }
     else if(!strcmp(token[0],"PUT")) // I DON'T THINK THIS WORKS AS INTENDED
     {
@@ -772,6 +782,19 @@ int main( int argc, char * argv[] )
               }
             }
           }
+        } 
+        if(!found)
+        {
+          printf("Error: No empty directories.\n");
+          for(int i = 0;i < MAX_NUM_ARGUMENTS;i++) // No ghost args
+          {
+            token[i] = NULL;
+          }
+          memset(secondArg,0,12);
+          free(newD);
+          fclose(outf);
+          fclose(inpf);
+          continue;
         } 
         offset = LBAToOffset(emptyCluster,&boot);
         fseek(outf,offset,SEEK_SET);
@@ -864,6 +887,19 @@ int main( int argc, char * argv[] )
               }
             }
           }
+        }
+        if(!found)
+        {
+          printf("Error: No empty directories.\n");
+          for(int i = 0;i < MAX_NUM_ARGUMENTS;i++) // No ghost args
+          {
+            token[i] = NULL;
+          }
+          memset(secondArg,0,12);
+          free(newD);
+          fclose(outf);
+          fclose(inpf);
+          continue;
         } 
         offset = LBAToOffset(emptyCluster,&boot);
         fseek(outf,offset,SEEK_SET);
@@ -897,6 +933,7 @@ int main( int argc, char * argv[] )
         fclose(inpf);
         fclose(outf);
       }
+      free(newD);
     }
     else if(!strcmp(token[0],"CD"))
     {
@@ -989,9 +1026,19 @@ int main( int argc, char * argv[] )
                 break;
               }
             }
+          }
         }
       }
-    }
+      if(searchCluster == -1)
+      {
+        printf("Error: File not found.\n");
+        for(int i = 0;i < MAX_NUM_ARGUMENTS;i++) // No ghost args
+        {
+          token[i] = NULL;
+        }
+        memset(secondArg,0,12);
+        continue;
+      }
       nextCluster = searchCluster;
       positionCluster = (position / 512); // Calculate how many clusters needed
       position = (position % 512);        // Calculate the offset into the last cluster
