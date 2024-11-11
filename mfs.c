@@ -313,16 +313,16 @@ void read_print_to_hex(FILE *fp,int pos,int numBytes,int remainingSpace,struct F
 
   while(i < numBytes) // I < total bytes to be read
   {
-    if(remainingSpace == 0) // Out of space in current cluster (if first iteration it is 512 - specified offset into)
+    if(remainingSpace == 0) //Out of space in current cluster
     {
-      nextCluster = NextLB(nextCluster,b,fp);
-      if(nextCluster == -1)
+      nextCluster = NextLB(nextCluster,b,fp); // Grab next
+      if(nextCluster == -1) // If end of chain we're done
       {
-        continue;
+        break;
       }
       else
       {
-        pos = LBAToOffset(nextCluster,b);
+        pos = LBAToOffset(nextCluster,b);   //Pos set to beginning of next cluster
         fseek(fp,pos,SEEK_SET);
         remainingSpace = 512;
       }
@@ -346,7 +346,7 @@ void read_print_to_dec(FILE *fp,int pos,int numBytes,int remainingSpace,struct F
       nextCluster = NextLB(nextCluster,b,fp);
       if(nextCluster == -1)
       {
-        continue;
+        break;
       }
       else
       {
@@ -374,7 +374,7 @@ void read_print_to_ascii(FILE *fp,int pos,int numBytes,int remainingSpace,struct
       nextCluster = NextLB(nextCluster,b,fp);
       if(nextCluster == -1)
       {
-        continue;
+        break;
       }
       else
       {
@@ -699,6 +699,7 @@ int main( int argc, char * argv[] )
       if(emptyCluster == -1)
       {
         printf("Error: No empty clusters.\n");
+        continue;
       }
       if(token_count == 2)
       {
@@ -766,14 +767,14 @@ int main( int argc, char * argv[] )
         nextCluster = find_empty_cluster(fp,&boot);
         previousFat = ((emptyCluster * 4) + (boot.BPB_BytesPerSec * boot.BPB_RsvdSecCnt));
         fseek(outf,previousFat,SEEK_SET);
-        fwrite(&nextCluster,4,1,outf);              // Write to previous fat address the new fat address
+        fwrite(&nextCluster,4,1,outf);              // Write next fat address in the previous address
         for(int i = 0;i < amountClustersNeeded;i++) // Repeat until all clusters are loaded
         {
           emptyCluster = find_empty_cluster(fp,&boot);
           offset = LBAToOffset(emptyCluster,&boot);
           fseek(outf,offset,SEEK_SET);
           write_to_cluster_or_file(outf,inpf);
-          if(i == (amountClustersNeeded - 1))
+          if(i == (amountClustersNeeded - 1))      // On last cluster we end by writing -1 to mark end of chain
           {
             int j = -1;
             previousFat = ((emptyCluster * 4) + (boot.BPB_BytesPerSec * boot.BPB_RsvdSecCnt));
@@ -905,13 +906,13 @@ int main( int argc, char * argv[] )
       int offset = 0;
       while(nextCluster != -1)
       {
-        offset = LBAToOffset(nextCluster,&boot);
+        offset = LBAToOffset(nextCluster,&boot); // Keep exploring root directory till end
         fseek(fp,offset,SEEK_SET);
         load_records(dir,fp);
         print_records(dir);
         nextCluster = NextLB(nextCluster,&boot,fp);
       }
-      for(int i = 1;i < totalEntries;i++)
+      for(int i = 1;i < totalEntries;i++)       // Explore other folders that were marked earlier
       {
         nextCluster = clusterAdresses[i];
         while(nextCluster != -1)
