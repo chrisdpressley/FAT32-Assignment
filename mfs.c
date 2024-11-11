@@ -455,10 +455,12 @@ int main( int argc, char * argv[] )
       ptr = NULL;
       token_count++;
     }
+
     if(token[0] == NULL)
     {
       continue;
     }
+
     if(closeFlag)
     {
       ptr = token[0];
@@ -505,13 +507,13 @@ int main( int argc, char * argv[] )
           printf("Error: File system image not found.");
           continue;
         }
-        currentImage = strdup(secondArg);
+        currentImage = strdup(secondArg); // Used in multiple functionalities
         load_boot_sector(&boot,fp);
         imageSize = ((boot.BPB_NumFATS * boot.BPB_FATSz32 * boot.BPB_BytesPerSec) //Size of rsvd sec + size of fats + (size of sec * num clusters)
-                  + (boot.BPB_RsvdSecCnt * boot.BPB_BytesPerSec) + (boot.BPB_SecPerClus * boot.BPB_BytesPerSec) //spent at least an hour figuring this out
+                  + (boot.BPB_RsvdSecCnt * boot.BPB_BytesPerSec) + (boot.BPB_SecPerClus * boot.BPB_BytesPerSec) 
                   * (boot.BPB_TotSec32 - (boot.BPB_RsvdSecCnt + (boot.BPB_NumFATS * boot.BPB_FATSz32))));
-        clusterAdresses = load_cluster_addresses(fp,&boot,boot.BPB_RootClus,&total_entries, &visited_clusters);
-        closeFlag = false;
+        clusterAdresses = load_cluster_addresses(fp,&boot,boot.BPB_RootClus,&total_entries, &visited_clusters); // Load up addresses of subdirectories
+        closeFlag = false; 
       }
       else
       {
@@ -574,27 +576,27 @@ int main( int argc, char * argv[] )
       offset = LBAToOffset(boot.BPB_RootClus,&boot);
       fseek(fp,offset,SEEK_SET); //Search root dir
       load_records(dir,fp);
-      int searchCluster = get_stat_info(dir,secondArg);
+      int searchCluster = get_stat_info(dir,secondArg); // Search for desired file in root directory
       
-      if(searchCluster == -1)     // This is how I am handling searching directories, multiple commands make use 
-      {                           // of a version of this code, it has some nested loops and is probably not very efficient
-        nextCluster = NextLB(boot.BPB_RootClus,&boot,fp);
-        while(nextCluster != -1)
+      if(searchCluster == -1)     // ********This is how I am handling searching directories, multiple commands make use ******
+      {                           // ********of a version of this code, it has some nested loops and is probably not very efficient******
+        nextCluster = NextLB(boot.BPB_RootClus,&boot,fp); // Wasn't found in first clust of root so next cluster of root
+        while(nextCluster != -1)  // If the next cluster of root isn't -1 we loop till the end of it
         {
           offset = LBAToOffset(nextCluster,&boot);
           fseek(fp,offset,SEEK_SET);
-          load_records(dir,fp);
-          searchCluster = get_stat_info(dir,secondArg);
+          load_records(dir,fp); // Load records from this one
+          searchCluster = get_stat_info(dir,secondArg); // Search again
           if(searchCluster == -1 )
           {
             nextCluster = NextLB(nextCluster,&boot,fp);
           }
           else
           {
-            break;
+            break;  // we found it 
           }
         }
-        if(nextCluster == -1)
+        if(nextCluster == -1) // Now we search the rest of the folders using the clusterAdresses array that was loaded upon opening
         {
           for(int i = 1;i < total_entries;i++)
           {
