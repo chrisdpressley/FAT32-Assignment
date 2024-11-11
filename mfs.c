@@ -468,18 +468,25 @@ int main( int argc, char * argv[] )
       {
         *ptr = toupper((unsigned char)*ptr);
         ptr++;
-      }if(!strcmp(token[0],"QUIT") || !strcmp(token[0],"EXIT") )
+      }
+      if(!strcmp(token[0],"QUIT") || !strcmp(token[0],"EXIT") )
       {
         return 0;
       }
-      else if(strcmp(token[0],"OPEN"))
+      else if(strcmp(token[0],"OPEN")) //If it's not "open" print error
       {
         printf("Error: File system image must be opened first.\n");
+        for(int i = 0;i < MAX_NUM_ARGUMENTS;i++) // No ghost entries
+        {
+          token[i] = NULL;
+        }
+        memset(secondArg,0,12);
         continue;
       }
     }
     else
     {
+      clusterAdresses = load_cluster_addresses(fp,&boot,boot.BPB_RootClus,&totalEntries, &visitedClusters);
       ptr = token[0];
       while(*ptr)
       {
@@ -505,6 +512,11 @@ int main( int argc, char * argv[] )
         if(fp == NULL)
         {
           printf("Error: File system image not found.\n");
+          for(int i = 0;i < MAX_NUM_ARGUMENTS;i++) // No ghost entries
+          {
+            token[i] = NULL;
+          }
+          memset(secondArg,0,12);
           continue;
         }
         currentImage = strdup(secondArg); // Used in multiple functionalities
@@ -986,7 +998,7 @@ int main( int argc, char * argv[] )
       remainingSpace = (512 - position);  // Get remaining space of last cluster
       if(positionCluster > 0)
       {
-        for(int j = 0;j < positionCluster;j++)
+        for(int j = 0;j < positionCluster;j++) // Get offset of last cluster
         {
           if(nextCluster == -1)
           {
@@ -998,14 +1010,14 @@ int main( int argc, char * argv[] )
         {
           continue;
         }
-        position += LBAToOffset(nextCluster,&boot); 
+        position += LBAToOffset(nextCluster,&boot); // Set position to last byte of last cluster
       }
       else
       {
         position += LBAToOffset(nextCluster,&boot); 
       }
       
-      if(token_count == 5)
+      if(token_count == 5)  // If 5 then last is the option
       {
         optionFlag = strdup(token[4]);
         ptr = optionFlag;
@@ -1078,7 +1090,6 @@ int main( int argc, char * argv[] )
               }
               else
               {
-
                 break;
               }
             }
