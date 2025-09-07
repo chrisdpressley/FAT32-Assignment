@@ -7,9 +7,6 @@ The code you submit for this assignment will be verified against a database cons
 
 You can find a FAT32 file image, fat32.img, in this repository.  Also you can find the fat 32 specification, fatspec.pdf.  You will need this specification to interpret the file system image correctly.
 
-## Group 
-You may work on this assignment in a group of two.  Your group members must both be in the same section of the course.  You must register your group at this [link](https://mavsuta-my.sharepoint.com/:x:/r/personal/trevor_bakker_uta_edu/Documents/Fall%202024%20Assignment%203%20Groups%20%20.xlsx?d=w11322791a62549439ece0a827cd7f621&csf=1&web=1&e=QdrhKz) by October 28th, 11:59pm. Make sure you have agreement with your group member before entering group information.  Adding a person to a group or adding yourself to a group without prior discussion with the group member will be a 10 point deduction. 
-
 ## Program Requirements
 
 Your program shall be named mfs.c and shall be implemented in C or C++.  You shall not use the system calls system(), fork(), or any of the exec family of system calls. You may not mount the disk image.
